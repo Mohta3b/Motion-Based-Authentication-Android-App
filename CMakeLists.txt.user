@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE QtCreatorProject>
-<!-- Written by QtCreator 13.0.0, 2024-05-19T21:41:28. -->
+<!-- Written by QtCreator 13.0.0, 2024-05-20T18:44:51. -->
 <qtcreator>
  <data>
   <variable>EnvironmentId</variable>
@@ -483,7 +483,7 @@
      <value type="QString">armeabi-v7a</value>
      <value type="QString">armeabi</value>
     </valuelist>
-    <value type="QString" key="AndroidDeviceSerialNumber">R58N64BG5MP</value>
+    <value type="QString" key="AndroidDeviceSerialNumber">172.17.71.175:5555</value>
     <value type="int" key="AndroidVersion.ApiLevel">33</value>
    </valuemap>
    <valuemap type="QVariantMap" key="ProjectExplorer.Target.RunConfiguration.0">

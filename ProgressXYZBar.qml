@@ -22,6 +22,7 @@ ColumnLayout {
         property alias value: bar.value
         Text {
             id: axes
+            color: "green"
             font.pixelSize: root.fontSize
             Layout.fillWidth: true
         }
