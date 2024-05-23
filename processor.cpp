@@ -2,12 +2,14 @@
 #include <QDateTime>
 #include <QDebug>
 #include <QFile>
+#include <QDir>
 
 // define number of samples for removing noise from accelerometer data
 #define ACCELEROMETER_SAMPLE_NUM 20
 #define GYROSCOPE_SAMPLE_NUM 20
 #define DATA_RATE 5
 #define THRESHOLD 0.3
+#define PATTERN_MATCH_THRESHOLD 0.2
 
 Processor::Processor(QObject *parent) 
             : QObject(parent),
@@ -20,16 +22,21 @@ Processor::Processor(QObject *parent)
     currentPath = {0, 0, 0, 0, "", 0};
 }
 
-void Processor::processPathData()
+void Processor::defineNewPattern()
 {
-    // Process path data here
-    // path endX and path endY are updated when the accelerometer data is 0. adngle is determined using gyroscope data. direction is determined using the angle and accelerometer data.
-    currentPath.endX = currentPath.startX + currentSensorData.distanceMovedX;
-    currentPath.endY = currentPath.startY + currentSensorData.distanceMovedY;
+    // Define a new pattern
+    // Reset the path vector
+    newPathVector.clear();
+    patternVector.clear();
+    
+    // Reset the current path
+    currentPath = {0, 0, 0, 0, "", 0};
+    // Reset the current sensor data
+    currentSensorData = {0, 0, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, ZERO, ZERO};
+}
 
-    // calculate angle
-
-    // calculate direction. only 4 directions are considered: up, down, left, right
+void Processor::updateDirection()
+{
     if (currentSensorData.x_axis == POSITIVE) {
         if (currentSensorData.y_axis == POSITIVE) {
             if (currentPath.angle > 0) {
@@ -80,9 +87,26 @@ void Processor::processPathData()
             currentPath.direction = "down";
         }
     }
+}
 
-    // add path to pathVector
-    pathVector.push_back(currentPath);
+
+void Processor::processPathData()
+{
+    // calculate direction. only 4 directions are considered: up, down, left, right
+    updateDirection();
+
+    // update endX, endY. if direction is up or down, endX = startX. if direction is left or right, endY = startY
+    if (currentPath.direction == "up" || currentPath.direction == "down") {
+        currentPath.endX = currentPath.startX;
+        currentPath.endY = currentPath.startY + currentSensorData.distanceMovedY;
+    }
+    else if (currentPath.direction == "left" || currentPath.direction == "right") {
+        currentPath.endX = currentPath.startX + currentSensorData.distanceMovedX;
+        currentPath.endY = currentPath.startY;
+    }
+        
+    // add path to newPathVector
+    newPathVector.push_back(currentPath);
 }
 
 void Processor::calibrateAccelerometer(qreal x, qreal y, qreal z)
@@ -103,6 +127,14 @@ qreal Processor::filterAccelerometerData(qreal data, qreal average)
     return filteredData;
 }
 
+void Processor::sendCurrentLoacationData()
+{
+    // Send the current location data to the GUI including current x and y values
+    emit locationDataProcessed(QString("X: %1, Y: %2")
+                                .arg(currentPath.startX + currentSensorData.distanceMovedX, 0, 'f', 3)
+                                .arg(currentPath.startY + currentSensorData.distanceMovedY, 0, 'f', 3));
+}
+
 void Processor::updatePosition(qreal x, qreal y)
 {
     if (x == 0 && y == 0) {
@@ -110,7 +142,7 @@ void Processor::updatePosition(qreal x, qreal y)
             processPathData();
             // TODO: emit new pattern path
             // send the last path to the GUI using json format
-            emit pathDataProcessed(QString("startX: %1, startY: %2, endX: %3, endY: %4, direction: %5, angle: %6")
+            emit pathDataProcessed(QString("[Path]\nstartX: %1, startY: %2\nendX: %3, endY: %4\ndirection: %5, angle: %6")
                                     .arg(currentPath.startX, 0, 'f', 3)
                                     .arg(currentPath.startY, 0, 'f', 3)
                                     .arg(currentPath.endX, 0, 'f', 3)
@@ -155,8 +187,10 @@ void Processor::updatePosition(qreal x, qreal y)
         currentSensorData.distanceMovedY += qAbs(y) * 0.5 * deltaTime * deltaTime + currentSensorData.last_velocity_y * deltaTime;
 
         // v = a * t + v0
-        currentSensorData.last_velocity_x = qAbs(x) * deltaTime + currentSensorData.last_velocity_x;
-        currentSensorData.last_velocity_y = qAbs(y) * deltaTime + currentSensorData.last_velocity_y;
+        currentSensorData.last_velocity_x += qAbs(x) * deltaTime + currentSensorData.last_velocity_x;
+        currentSensorData.last_velocity_y += qAbs(y) * deltaTime + currentSensorData.last_velocity_y;
+
+        sendCurrentLoacationData();
     }
 }
 
@@ -168,7 +202,7 @@ void Processor::processAccelerometerData(qreal x, qreal y, qreal z)
     if (currentSensorData.accelerometerSampleNumber < ACCELEROMETER_SAMPLE_NUM) {
         calibrateAccelerometer(x, y, z);
         // Emit the message to show the number of samples left to remove noise
-        emit accelerometerDataProcessed(QString("Calibrating accelerometer: %1 samples left for noise removal")
+        emit accelerometerDataProcessed(QString("[Calibrating accelerometer]\nSamples left for noise removal: %1")
                                         .arg(ACCELEROMETER_SAMPLE_NUM - currentSensorData.accelerometerSampleNumber));
         return;
     }
@@ -211,7 +245,7 @@ void Processor::processGyroscopeData(qreal x, qreal y, qreal z)
     if (currentSensorData.gyroscopeSampleNumber < GYROSCOPE_SAMPLE_NUM) {
         calibrateGyroscope(x, y, z);
         // Emit the message to show the number of samples left to remove noise
-        emit gyroscopeDataProcessed(QString("Calibrating gyroscope: %1 samples left for noise removal")
+        emit gyroscopeDataProcessed(QString("[Calibrating gyroscope]\nSamples left for noise removal: %1")
                                     .arg(GYROSCOPE_SAMPLE_NUM - currentSensorData.gyroscopeSampleNumber));
         return;
     }
@@ -238,21 +272,113 @@ void Processor::processGyroscopeData(qreal x, qreal y, qreal z)
 
 void Processor::savePattern()
 {
-    // Save the pattern to a file
+    // Save the pattern to a json file
     // The file name is the current date and time
-    QString fileName = QDateTime::currentDateTime().toString("yyyy-MM-dd_hh-mm-ss");
-    QFile file(fileName);
-    if (file.open(QIODevice::WriteOnly)) {
-        QTextStream stream(&file);
-        for (const auto &path : pathVector) {
-            stream << QString("startX: %1, startY: %2, endX: %3, endY: %4, direction: %5, angle: %6\n")
-                      .arg(path.startX, 0, 'f', 3)
-                      .arg(path.startY, 0, 'f', 3)
-                      .arg(path.endX, 0, 'f', 3)
-                      .arg(path.endY, 0, 'f', 3)
-                      .arg(path.direction)
-                      .arg(path.angle);
-        }
-        file.close();
+    // save it in the saved-pattern directory under the current directory
+
+    // copy newPathVector to patternVector
+    for (const Path& path : newPathVector) {
+        patternVector.push_back(path); // Push a copy of each Path object
     }
+
+    // delete all files under the current directory
+    QDir dir("saved-pattern");
+    dir.setNameFilters(QStringList() << "*.json");
+    dir.setFilter(QDir::Files);
+    foreach (QString dirFile, dir.entryList()) {
+        dir.remove(dirFile);
+    }
+
+    // Create a new file
+    QString fileName = QDateTime::currentDateTime().toString("yyyy-MM-dd-hh-mm-ss") + ".json";
+    QString filePath = "saved-pattern/" + fileName;
+    QFile file(filePath);
+    if (!file.open(QIODevice::WriteOnly)) {
+        qDebug() << "Error: Cannot open file for writing";
+        return;
+    }
+
+    // Write the pattern to the file
+    QTextStream out(&file);
+    out << "{\n";
+    out << "  \"pattern\": [\n";
+    for (int i = 0; i < newPathVector.size(); i++) {
+        out << "    {\n";
+        out << "      \"startX\": " << newPathVector[i].startX << ",\n";
+        out << "      \"startY\": " << newPathVector[i].startY << ",\n";
+        out << "      \"endX\": " << newPathVector[i].endX << ",\n";
+        out << "      \"endY\": " << newPathVector[i].endY << ",\n";
+        out << "      \"direction\": \"" << newPathVector[i].direction << "\",\n";
+        out << "      \"angle\": " << newPathVector[i].angle << "\n";
+        out << "    }";
+        if (i != newPathVector.size() - 1) {
+            out << ",";
+        }
+        out << "\n";
+    }
+    out << "  ]\n";
+    out << "}\n";
+
+    // Close the file
+    file.close();
+
+    qDebug() << "Pattern saved to " << filePath;
 }
+
+
+void Processor::startCapturing()
+{
+    // Start capturing the data
+    // Reset the total sample number
+    totalSampleNumber = 0;
+    // Reset the current sensor data
+    currentSensorData = {0, 0, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, ZERO, ZERO};
+    // Reset the current path
+    currentPath = {0, 0, 0, 0, "", 0};
+    // Reset the new path vector
+    newPathVector.clear();
+}
+
+
+void Processor::checkPatternMatch() {
+    // check if newPathVector matches the patternVector with a threshold of 0.2
+    bool match = true;
+
+    if (newPathVector.size() != patternVector.size()) {
+        emit patternMatched("Pattern not matched");
+        return;
+    }
+
+    for (int i = 0; i < newPathVector.size(); i++) {
+        if (qAbs(newPathVector[i].startX - patternVector[i].startX) > PATTERN_MATCH_THRESHOLD) {
+            match = false;
+        }
+        if (qAbs(newPathVector[i].startY - patternVector[i].startY) > PATTERN_MATCH_THRESHOLD) {
+            match = false;
+        }
+        if (qAbs(newPathVector[i].endX - patternVector[i].endX) > PATTERN_MATCH_THRESHOLD) {
+            match = false;
+        }
+        if (qAbs(newPathVector[i].endY - patternVector[i].endY) > PATTERN_MATCH_THRESHOLD) {
+            match = false;
+        }
+        if (newPathVector[i].direction != patternVector[i].direction) {
+            match = false;
+        }
+        if (qAbs(newPathVector[i].angle - patternVector[i].angle) > 45) {
+            match = false;
+        }
+        if (!match)
+            break;
+    }
+
+    if (match) {
+        emit patternMatched("Pattern matched");
+    }
+    else {
+        emit patternMatched("Pattern not matched");
+    }
+
+}
+
+

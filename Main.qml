@@ -2,6 +2,8 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 
+import SensorShowcaseModule
+
 ApplicationWindow {
     id: root
 
@@ -15,6 +17,7 @@ ApplicationWindow {
     height: 760
     visible: true
     title: "Motion Based Authentication"
+
 
     StackView {
             id: stack

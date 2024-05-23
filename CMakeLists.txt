@@ -60,6 +60,8 @@ qt_add_qml_module(sensorsshowcase
         QML_FILES LoadingPage.qml
         QML_FILES MainPage.qml
         QML_FILES CustomPath.qml
+        QML_FILES LiveLocation.qml
+        QML_FILES ProcessorSingleton.qml
 )
 
 target_link_libraries(sensorsshowcase

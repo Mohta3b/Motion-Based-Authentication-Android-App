@@ -3,15 +3,17 @@ import QtQuick.Controls
 import QtQuick.Dialogs
 import QtQuick.Layouts
 
+
 Rectangle {
     width: parent.width
     height: parent.height
-    color: "#2c3e50" // Dark background color
+    color: "#263238" // Darker color for the background
+
+    ProcessorSingleton {
+        id: processor
+    }
 
     Column {
-        // anchors.top: parent.top
-        // anchors.horizontalCenter: parent.horizontalCenter
-        // width: parent.width
         anchors.fill: parent
         spacing: 40
 
@@ -34,7 +36,7 @@ Rectangle {
         Rectangle {
             width: parent.width
             height: 1 // Adjust height as needed
-            color: "#37474f" // Darker color for the divider
+            color: "#607d8b" // Lighter color for the line
         }
 
 
@@ -52,7 +54,7 @@ Rectangle {
                 padding: 12
                 background: Rectangle {
                     radius: 8
-                    color: "blue" // Button color
+                    color: "#2ecc71" // Button color
                 }
                 contentItem: Text {
                     text: "Authenticate"
@@ -67,6 +69,7 @@ Rectangle {
                         messageDialog.text = "There is no pattern defined yet!"
                         messageDialog.open()
                     } else {
+                        processor.startCapturing()
                         stack.push("AuthenticatePage.qml")
                     }
                 }
@@ -78,7 +81,7 @@ Rectangle {
                 padding: 12
                 background: Rectangle {
                     radius: 8
-                    color: "#e74c3c" // Button color
+                    color: "#3498db" // Button color
                 }
                 contentItem: Text {
                     text: "Define New Pattern"
@@ -88,6 +91,8 @@ Rectangle {
                     verticalAlignment: Text.AlignVCenter // Center vertically
                 }
                 onClicked: {
+                    // delete processor and create new instance
+                    processor.defineNewPattern()
                     stack.push("DefinePatternPage.qml")
                 }
             }
