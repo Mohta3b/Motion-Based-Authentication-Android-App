@@ -59,6 +59,7 @@ qt_add_qml_module(sensorsshowcase
         QML_FILES DefinePatternPage.qml
         QML_FILES LoadingPage.qml
         QML_FILES MainPage.qml
+        QML_FILES CustomPath.qml
 )
 
 target_link_libraries(sensorsshowcase

@@ -9,6 +9,8 @@ Rectangle {
 
     property var inputPattern: []
 
+    
+
     Column {
         anchors.centerIn: parent
         spacing: 20

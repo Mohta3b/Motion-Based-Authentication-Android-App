@@ -8,6 +8,9 @@ ApplicationWindow {
     readonly property int defaultFontSize: 22
     readonly property int imageSize: width / 2
 
+    // patternDefind boolean to check if the pattern is defined or not
+    property bool patternDefined: false
+
     width: 420
     height: 760
     visible: true

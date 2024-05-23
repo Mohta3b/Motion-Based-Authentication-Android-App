@@ -63,7 +63,7 @@ Rectangle {
                 }
 
                 onClicked: {
-                    if (!ApplicationWindow.patternDefined) {
+                    if (!root.patternDefined) {
                         messageDialog.text = "There is no pattern defined yet!"
                         messageDialog.open()
                     } else {
