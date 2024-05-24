@@ -7,13 +7,14 @@
 // define number of samples for removing noise from accelerometer data
 #define ACCELEROMETER_SAMPLE_NUM 20
 #define GYROSCOPE_SAMPLE_NUM 20
-#define DATA_RATE 5
+#define ACCEL_DATA_RATE 5
+#define GYRO_DATA_RATE 5
 #define THRESHOLD 0.3
 #define PATTERN_MATCH_THRESHOLD 0.2
 
 Processor::Processor(QObject *parent) 
             : QObject(parent),
-            m_dataRate(DATA_RATE)
+            m_dataRate(ACCEL_DATA_RATE)
 {
     // Initialize the processor
     
@@ -35,56 +36,54 @@ void Processor::defineNewPattern()
     currentSensorData = {0, 0, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, ZERO, ZERO};
 }
 
-void Processor::updateDirection()
-{
-    if (currentSensorData.x_axis == POSITIVE) {
-        if (currentSensorData.y_axis == POSITIVE) {
-            if (currentPath.angle > 0) {
-                currentPath.direction = "up";
-            }
-            else {
-                currentPath.direction = "right";
-            }
+
+void Processor::updateDirection() {
+    // Normalize the angle to be within 0 to 360 degrees
+    qreal normalizedAngle = fmod(currentPath.angle, 360);
+    if (normalizedAngle < 0) {
+        normalizedAngle += 360;
+    }
+
+    // Determine direction based on normalized angle
+    if (normalizedAngle >= 0 && normalizedAngle < 45 || normalizedAngle >= 315 && normalizedAngle < 360) {
+        if (currentSensorData.x_axis > 0) {
+            currentPath.direction = "right";
+        } else if (currentSensorData.x_axis < 0) {
+            currentPath.direction = "left";
+        } else if (currentSensorData.y_axis > 0) {
+            currentPath.direction = "up";
+        } else if (currentSensorData.y_axis < 0) {
+            currentPath.direction = "down";
         }
-        else if (currentSensorData.y_axis == NEGATIVE) {
-            if (currentPath.angle > 0) {
-                currentPath.direction = "down";
-            }
-            else {
-                currentPath.direction = "right";
-            }
-        }
-        else {
+    } else if (normalizedAngle >= 45 && normalizedAngle < 135) {
+        if (currentSensorData.x_axis > 0) {
+            currentPath.direction = "up";
+        } else if (currentSensorData.x_axis < 0) {
+            currentPath.direction = "down";
+        } else if (currentSensorData.y_axis > 0) {
+            currentPath.direction = "left";
+        } else if (currentSensorData.y_axis < 0) {
             currentPath.direction = "right";
         }
-    }
-    else if (currentSensorData.x_axis == NEGATIVE) {
-        if (currentSensorData.y_axis == POSITIVE) {
-            if (currentPath.angle > 0) {
-                currentPath.direction = "up";
-            }
-            else {
-                currentPath.direction = "left";
-            }
-        }
-        else if (currentSensorData.y_axis == NEGATIVE) {
-            if (currentPath.angle > 0) {
-                currentPath.direction = "down";
-            }
-            else {
-                currentPath.direction = "left";
-            }
-        }
-        else {
+    } else if (normalizedAngle >= 135 && normalizedAngle < 225) {
+        if (currentSensorData.x_axis > 0) {
             currentPath.direction = "left";
-        }
-    }
-    else {
-        if (currentSensorData.y_axis == POSITIVE) {
+        } else if (currentSensorData.x_axis < 0) {
+            currentPath.direction = "right";
+        } else if (currentSensorData.y_axis > 0) {
+            currentPath.direction = "down";
+        } else if (currentSensorData.y_axis < 0) {
             currentPath.direction = "up";
         }
-        else if (currentSensorData.y_axis == NEGATIVE) {
+    } else if (normalizedAngle >= 225 && normalizedAngle < 315) {
+        if (currentSensorData.x_axis > 0) {
             currentPath.direction = "down";
+        } else if (currentSensorData.x_axis < 0) {
+            currentPath.direction = "up";
+        } else if (currentSensorData.y_axis > 0) {
+            currentPath.direction = "right";
+        } else if (currentSensorData.y_axis < 0) {
+            currentPath.direction = "left";
         }
     }
 }
@@ -106,7 +105,7 @@ void Processor::processPathData()
     }
         
     // add path to newPathVector
-    newPathVector.push_back(currentPath);
+    newPathVector.append(currentPath);
 }
 
 void Processor::calibrateAccelerometer(qreal x, qreal y, qreal z)
@@ -138,6 +137,8 @@ void Processor::sendCurrentLoacationData()
 void Processor::updatePosition(qreal x, qreal y)
 {
     if (x == 0 && y == 0) {
+        // enable gyro sensor
+        emit gyroSensorEnabled();
         if (currentSensorData.lastSampleWasMoving) {
             processPathData();
             // TODO: emit new pattern path
@@ -167,6 +168,8 @@ void Processor::updatePosition(qreal x, qreal y)
         return;
     }
     else {
+        // disable gyro sensor
+        emit gyroSensorDisabled();
         if (!currentSensorData.lastSampleWasMoving) {
             // update distanceMovedX, distanceMovedY. distance = (1/2 * abs(a) * t^2) + v0 * t. which t is the 1 / data_rate
             if (x > 0)
@@ -233,9 +236,9 @@ void Processor::calibrateGyroscope(qreal x, qreal y, qreal z)
     currentSensorData.gyroscopeSampleNumber++;
 }
 
-void Processor::updateAngle(qreal z)
+void Processor::updateAngle(qreal wz)
 {
-    currentPath.angle = z;
+    
 }
 
 void Processor::processGyroscopeData(qreal x, qreal y, qreal z)
@@ -251,6 +254,8 @@ void Processor::processGyroscopeData(qreal x, qreal y, qreal z)
     }
 
     // Subtract the average to remove bias
+    // qreal filteredGyroscopeX = x - currentSensorData.averageGyroscopeX;
+    // qreal filteredGyroscopeY = y - currentSensorData.averageGyroscopeY;
     qreal filteredGyroscopeZ = z - currentSensorData.averageGyroscopeZ;
 
     const qreal GYROSCOPE_THRESHOLD = 0.2;
@@ -278,51 +283,64 @@ void Processor::savePattern()
 
     // copy newPathVector to patternVector
     for (const Path& path : newPathVector) {
-        patternVector.push_back(path); // Push a copy of each Path object
+        patternVector.append(path); // Push a copy of each Path object
     }
 
     // delete all files under the current directory
-    QDir dir("saved-pattern");
-    dir.setNameFilters(QStringList() << "*.json");
-    dir.setFilter(QDir::Files);
-    foreach (QString dirFile, dir.entryList()) {
-        dir.remove(dirFile);
-    }
+    // QDir dir("saved-pattern");
+    // dir.setNameFilters(QStringList() << "*.json");
+    // dir.setFilter(QDir::Files);
+    // foreach (QString dirFile, dir.entryList()) {
+    //     dir.remove(dirFile);
+    // }
 
-    // Create a new file
-    QString fileName = QDateTime::currentDateTime().toString("yyyy-MM-dd-hh-mm-ss") + ".json";
-    QString filePath = "saved-pattern/" + fileName;
-    QFile file(filePath);
-    if (!file.open(QIODevice::WriteOnly)) {
-        qDebug() << "Error: Cannot open file for writing";
-        return;
-    }
+    // // Create a new file
+    // QString fileName = QDateTime::currentDateTime().toString("yyyy-MM-dd-hh-mm-ss") + ".json";
+    // QString filePath = "saved-pattern/" + fileName;
+    // QFile file(filePath);
+    // if (!file.open(QIODevice::WriteOnly)) {
+    //     qDebug() << "Error: Cannot open file for writing";
+    //     return;
+    // }
 
-    // Write the pattern to the file
-    QTextStream out(&file);
-    out << "{\n";
-    out << "  \"pattern\": [\n";
+    // // Write the pattern to the file
+    // QTextStream out(&file);
+    // out << "{\n";
+    // out << "  \"pattern\": [\n";
+    // for (int i = 0; i < newPathVector.size(); i++) {
+    //     out << "    {\n";
+    //     out << "      \"startX\": " << newPathVector[i].startX << ",\n";
+    //     out << "      \"startY\": " << newPathVector[i].startY << ",\n";
+    //     out << "      \"endX\": " << newPathVector[i].endX << ",\n";
+    //     out << "      \"endY\": " << newPathVector[i].endY << ",\n";
+    //     out << "      \"direction\": \"" << newPathVector[i].direction << "\",\n";
+    //     out << "      \"angle\": " << newPathVector[i].angle << "\n";
+    //     out << "    }";
+    //     if (i != newPathVector.size() - 1) {
+    //         out << ",";
+    //     }
+    //     out << "\n";
+    // }
+    // out << "  ]\n";
+    // out << "}\n";
+
+    // // Close the file
+    // file.close();
+
+    qDebug() << "Pattern saved";
+
+    // emit the pattern in json format
+    QString result = "";
     for (int i = 0; i < newPathVector.size(); i++) {
-        out << "    {\n";
-        out << "      \"startX\": " << newPathVector[i].startX << ",\n";
-        out << "      \"startY\": " << newPathVector[i].startY << ",\n";
-        out << "      \"endX\": " << newPathVector[i].endX << ",\n";
-        out << "      \"endY\": " << newPathVector[i].endY << ",\n";
-        out << "      \"direction\": \"" << newPathVector[i].direction << "\",\n";
-        out << "      \"angle\": " << newPathVector[i].angle << "\n";
-        out << "    }";
-        if (i != newPathVector.size() - 1) {
-            out << ",";
-        }
-        out << "\n";
+        result += QString("startX: %1, startY: %2, endX: %3, endY: %4, direction: %5, angle: %6\n")
+                  .arg(newPathVector[i].startX, 0, 'f', 3)
+                  .arg(newPathVector[i].startY, 0, 'f', 3)
+                  .arg(newPathVector[i].endX, 0, 'f', 3)
+                  .arg(newPathVector[i].endY, 0, 'f', 3)
+                  .arg(newPathVector[i].direction)
+                  .arg(newPathVector[i].angle);
     }
-    out << "  ]\n";
-    out << "}\n";
-
-    // Close the file
-    file.close();
-
-    qDebug() << "Pattern saved to " << filePath;
+    emit patternSaved(result);
 }
 
 
@@ -339,46 +357,84 @@ void Processor::startCapturing()
     newPathVector.clear();
 }
 
-
-void Processor::checkPatternMatch() {
-    // check if newPathVector matches the patternVector with a threshold of 0.2
+void Processor::checkPatternMatch(const QVariant &pattern)
+{
+    // Check if the newPathVector matches the pattern with a threshold of 0.2
     bool match = true;
 
-    if (newPathVector.size() != patternVector.size()) {
+    // Convert the QVariant to a QVariantList
+    QVariantList patternList = pattern.toList();
+
+    // Check if the sizes of the two vectors are the same
+    if (newPathVector.size() != patternList.size()) {
         emit patternMatched("Pattern not matched");
         return;
     }
 
+    // Check if the two vectors match
     for (int i = 0; i < newPathVector.size(); i++) {
-        if (qAbs(newPathVector[i].startX - patternVector[i].startX) > PATTERN_MATCH_THRESHOLD) {
+        QVariantMap patternMap = patternList[i].toMap();
+        
+        // Compare each path element with the pattern
+        if (qAbs(newPathVector[i].startX - patternMap["startX"].toDouble()) > PATTERN_MATCH_THRESHOLD ||
+            qAbs(newPathVector[i].startY - patternMap["startY"].toDouble()) > PATTERN_MATCH_THRESHOLD ||
+            qAbs(newPathVector[i].endX - patternMap["endX"].toDouble()) > PATTERN_MATCH_THRESHOLD ||
+            qAbs(newPathVector[i].endY - patternMap["endY"].toDouble()) > PATTERN_MATCH_THRESHOLD ||
+            newPathVector[i].direction != patternMap["direction"].toString() ||
+            qAbs(newPathVector[i].angle - patternMap["angle"].toDouble()) > 45) {
             match = false;
-        }
-        if (qAbs(newPathVector[i].startY - patternVector[i].startY) > PATTERN_MATCH_THRESHOLD) {
-            match = false;
-        }
-        if (qAbs(newPathVector[i].endX - patternVector[i].endX) > PATTERN_MATCH_THRESHOLD) {
-            match = false;
-        }
-        if (qAbs(newPathVector[i].endY - patternVector[i].endY) > PATTERN_MATCH_THRESHOLD) {
-            match = false;
-        }
-        if (newPathVector[i].direction != patternVector[i].direction) {
-            match = false;
-        }
-        if (qAbs(newPathVector[i].angle - patternVector[i].angle) > 45) {
-            match = false;
-        }
-        if (!match)
             break;
+        }
     }
 
+    // Emit the result
     if (match) {
         emit patternMatched("Pattern matched");
-    }
-    else {
+    } else {
         emit patternMatched("Pattern not matched");
     }
-
 }
+
+
+// void Processor::checkPatternMatch() {
+//     // check if newPathVector matches the patternVector with a threshold of 0.2
+//     bool match = true;
+
+//     if (newPathVector.size() != patternVector.size()) {
+//         emit patternMatched("Pattern not matched");
+//         return;
+//     }
+
+//     for (int i = 0; i < newPathVector.size(); i++) {
+//         if (qAbs(newPathVector[i].startX - patternVector[i].startX) > PATTERN_MATCH_THRESHOLD) {
+//             match = false;
+//         }
+//         if (qAbs(newPathVector[i].startY - patternVector[i].startY) > PATTERN_MATCH_THRESHOLD) {
+//             match = false;
+//         }
+//         if (qAbs(newPathVector[i].endX - patternVector[i].endX) > PATTERN_MATCH_THRESHOLD) {
+//             match = false;
+//         }
+//         if (qAbs(newPathVector[i].endY - patternVector[i].endY) > PATTERN_MATCH_THRESHOLD) {
+//             match = false;
+//         }
+//         if (newPathVector[i].direction != patternVector[i].direction) {
+//             match = false;
+//         }
+//         if (qAbs(newPathVector[i].angle - patternVector[i].angle) > 45) {
+//             match = false;
+//         }
+//         if (!match)
+//             break;
+//     }
+
+//     if (match) {
+//         emit patternMatched("Pattern matched");
+//     }
+//     else {
+//         emit patternMatched("Pattern not matched");
+//     }
+
+// }
 
 

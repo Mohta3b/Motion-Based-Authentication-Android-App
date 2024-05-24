@@ -45,7 +45,7 @@ public:
     qreal filterAccelerometerData(qreal data, qreal average);
     void processPathData();
     void calibrateGyroscope(qreal x, qreal y, qreal z);
-    void updateAngle(qreal z);
+    void updateAngle(qreal wz);
     void updateDirection();
     void sendCurrentLoacationData();
 
@@ -57,6 +57,9 @@ signals:
     void dataRateChanged();
     void locationDataProcessed(const QString &result);
     void patternMatched(const QString &result);
+    void patternSaved(const QString &result);
+    void gyroSensorEnabled();
+    void gyroSensorDisabled();
 
 public slots:
     void processAccelerometerData(qreal x, qreal y, qreal z);
@@ -64,7 +67,8 @@ public slots:
     void defineNewPattern();
     void savePattern();
     void startCapturing();
-    void checkPatternMatch();
+    // check PatternMatch receives property var savedPattern: [] as input pattern
+    void checkPatternMatch(const QVariant &pattern);
 
 private:
     int m_dataRate;

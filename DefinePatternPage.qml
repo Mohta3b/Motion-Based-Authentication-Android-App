@@ -8,7 +8,7 @@ import QtQuick.Dialogs
 Rectangle {
     width: parent.width
     height: parent.height
-    color: "black"
+    color: "#263238"
 
     // property var newPattern: []
 
@@ -18,11 +18,27 @@ Rectangle {
     ProcessorSingleton {
         id: processor
 
+        onGyroSensorEnabled: {
+            gyroscope.start()
+        }
+
+        onGyroSensorDisabled: {
+            gyroscope.stop()
+        }
+
         onAccelerometerDataProcessed: {
-            // Handle processed data from C++
-            // console.log("Processed Accelerometer Data:", result)
-            // Display the processed result in QML
+            // Update the text and progress bar based on the processed data
             processedAccelerometerDataText.text = result
+            var matches = result.match(/Samples left for noise removal: (\d+)/)
+            if (matches && matches.length > 1) {
+                var samplesLeft = parseInt(matches[1])
+                calibrationProgressBar.value = 20 - samplesLeft
+                if (!calibrationDialog.visible) {
+                    calibrationDialog.open()
+                }
+            } else {
+                calibrationDialog.close()
+            }
         }
 
         onGyroscopeDataProcessed: {
@@ -50,6 +66,34 @@ Rectangle {
             // Display the processed result in QML
             patternText.text = result
         }
+
+        onPatternSaved: {
+            // Handle processed data from C++
+            console.log("Pattern Saved:", result)
+            // update the savedPattern property in the root component. result is like "[Path]\nstartX: %1, startY: %2, endX: %3, endY: %4, direction: %5, angle: %6\n..."
+            // property var savedPattern: [] in the root component
+            root.savedPattern = []  // Clear previous pattern
+            var parts = result.split("\n")
+            for (var i = 0; i < parts.length; i++) {
+                var path = parts[i]
+                if (path.length > 0) {
+                    // Extract values from the string and push to savedPattern
+                    var regex = /startX: (\d+.\d+), startY: (\d+.\d+), endX: (\d+.\d+), endY: (\d+.\d+), direction: (\w+), angle: (-?\d+.\d+)/
+                    var match = regex.exec(path)
+                    if (match) {
+                        root.savedPattern.push({
+                            startX: parseFloat(match[1]),
+                            startY: parseFloat(match[2]),
+                            endX: parseFloat(match[3]),
+                            endY: parseFloat(match[4]),
+                            direction: match[5],
+                            angle: parseFloat(match[6])
+                        })
+                    }
+                }
+            }
+        }
+
     }
 
 
@@ -115,8 +159,8 @@ Rectangle {
 
         // Display pattern data received from C++ in a rectangle as vector. received path is like QString("Path: startX: %1, startY: %2, endX: %3, endY: %4, direction: %5, angle: %6")
         Rectangle {
-            width: parent.width - 10
-            height: parent.height / 2
+            width: parent.width
+            height: parent.height / 2 + 5
             color: "black"
             border.color: "white"
             border.width: 2
@@ -133,6 +177,7 @@ Rectangle {
             text: ""
             font.pixelSize: 16
             color: "white"
+            visible: false
         }
 
         Text {
@@ -140,12 +185,13 @@ Rectangle {
             text: ""
             font.pixelSize: 16
             color: "white"
+            visible: false
         }
 
         Text {
             id: patternText
             text: ""
-            font.pixelSize: 14
+            font.pixelSize: 20
             color: "red"
         }
 
@@ -163,15 +209,70 @@ Rectangle {
                 radius: 8  // Optional: if you want rounded corners
             }
             onClicked: {
-                root.patternDefined = true
-
                 // send save signal to cpp file
-                processor.savePattern()
+                processor.savePattern()            
+
+                root.patternDefined = true
 
                 // Show popup message
                 popup.open()
                 // Automatically close the popup after a delay
                 // popupTimer.start()
+            }
+        }
+
+        Dialog {
+            id: calibrationDialog
+            title: "Calibrating"
+            modal: true
+            visible: false
+            width: 300
+            height: 150
+            x: (parent.width - width) / 2
+            y: (parent.height - height) / 2
+            standardButtons: Dialog.NoButton
+
+            Column {
+                spacing: 20
+                padding: 20
+                anchors.centerIn: parent
+
+                Text {
+                    text: "Calibrating Sensors"
+                    font.pixelSize: 18
+                    color: "black"
+                    horizontalAlignment: Text.AlignHCenter
+                }
+
+                Rectangle {
+                    width: 250
+                    height: 20
+                    color: "#616161"
+                    radius: 10
+                    border.color: "#B0BEC5"
+                    border.width: 1
+
+                    Rectangle {
+                        id: progressIndicator
+                        width: calibrationProgressBar.width * calibrationProgressBar.value / calibrationProgressBar.to
+                        height: parent.height
+                        color: "#4CAF50" // Green color for the progress indicator
+                        radius: 10
+                        Behavior on width {
+                            NumberAnimation {
+                                duration: 200
+                            }
+                        }
+                    }
+
+                    ProgressBar {
+                        id: calibrationProgressBar
+                        from: 0
+                        to: 20
+                        value: 0
+                        visible: false // Hide the default appearance of the ProgressBar
+                    }
+                }
             }
         }
 
@@ -184,22 +285,50 @@ Rectangle {
             x: (parent.width - width) / 2
             y: (parent.height - height) / 2
 
-            Text {
-                text: "Pattern Defined Successfully!"
-                color: "Black"
-                font.pixelSize: 16
-                anchors.centerIn: parent.Center
-                horizontalAlignment: Text.AlignHCenter // Center horizontally
-                verticalAlignment: Text.AlignVCenter // Center vertically
-            }
+            Rectangle {
+                width: parent.width
+                height: parent.height
+                radius: 10
+                
+                color: "#04745c"
+                border.color: "black"
+                border.width: 2
 
-            Button {
-                text: "Ok"
-                anchors.bottom: parent.bottom
-                anchors.horizontalCenter: parent.horizontalCenter
-                onClicked: {
-                    popup.close()
-                    stack.pop()
+                Column {
+                    anchors.centerIn: parent
+                    spacing: 20
+
+                    Text {
+                        text: "Pattern Defined Successfully!"
+                        color: "Black"
+                        font.pixelSize: 18
+                        font.bold: true
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+
+                    Button {
+                        text: "Ok"
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        width: 100
+                        height: 40
+                        background: Rectangle {
+                            radius: 8
+                            color: "#b5f3ee"
+                        }
+                        contentItem: Text {
+                            text: "Ok"
+                            color: "black"
+                            font.pixelSize: 16
+                            font.bold: true
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                        onClicked: {
+                            popup.close()
+                            stack.pop()
+                        }
+                    }
                 }
             }
         }

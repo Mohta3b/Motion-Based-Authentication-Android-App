@@ -12,6 +12,8 @@ ApplicationWindow {
 
     // patternDefind boolean to check if the pattern is defined or not
     property bool patternDefined: false
+    // savedPattern is the pattern saved by the user and it is list of paths
+    property var savedPattern: []
 
     width: 420
     height: 760

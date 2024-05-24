@@ -127,6 +127,7 @@ Rectangle {
             color: "white"
             // set right alignment
             horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: parent.Top
         }
         // Divider line
         Rectangle {
@@ -187,11 +188,14 @@ Rectangle {
         Button {
             id: captureButton
             text: "Start"
-            font.pixelSize: 18
+            font.pixelSize: 22
             padding: 12
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: parent.width
             background: Rectangle {
+                id: bid
                 radius: 8
-                color: "blue"
+                color: "green"
             }
             contentItem: Text {
                 text: captureButton.text
@@ -203,14 +207,18 @@ Rectangle {
             onClicked: {
                 if (captureButton.text === "Start") {
                     captureButton.text = "Finish"
+                    bid.color = "#B71C1C"
+
                     // Start capturing data
                     // processor.startCapturing()
                 } else {
                     // Finish capturing data
                     captureButton.text = "Start"
+                    bid.color = "green"
 
                     // Check if pattern matches
-                    processor.checkPatternMatch()
+                    // processor.checkPatternMatch()
+                    processor.checkPatternMatch(root.savedPattern)
                 }
             }
         }
@@ -233,7 +241,7 @@ Rectangle {
             anchors.centerIn: parent
 
             Text {
-                text: "Calibrating accelerometer"
+                text: "Calibrating Sensors"
                 font.pixelSize: 18
                 color: "black"
                 horizontalAlignment: Text.AlignHCenter

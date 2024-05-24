@@ -99,9 +99,9 @@ Rectangle {
         }
     }
     MessageDialog {
-                    id: messageDialog
-                    text: ""
-                    title: "Error"
-                    buttons: StandardButton.Ok
-                }
+                id: messageDialog
+                text: ""
+                title: "Error"
+                buttons: StandardButton.Ok
+            }
 }
