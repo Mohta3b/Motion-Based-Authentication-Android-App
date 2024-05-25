@@ -26,6 +26,14 @@ Rectangle {
             gyroscope.stop()
         }
 
+        onAccelSensorEnabled: {
+            accelerometer.start()
+        }
+
+        onAccelSensorDisabled: {
+            accelerometer.stop()
+        }
+
         onAccelerometerDataProcessed: {
             // Update the text and progress bar based on the processed data
             processedAccelerometerDataText.text = result
@@ -68,32 +76,44 @@ Rectangle {
         }
 
         onPatternSaved: {
-            // Handle processed data from C++
+            // Debug the result to ensure it's being received correctly
             console.log("Pattern Saved:", result)
-            // update the savedPattern property in the root component. result is like "[Path]\nstartX: %1, startY: %2, endX: %3, endY: %4, direction: %5, angle: %6\n..."
+
+            // Update the savedPattern property in the root component
+            // result is like "startX: %1, startY: %2, endX: %3, endY: %4, direction: %5, angle: %6\n..."
             // property var savedPattern: [] in the root component
             root.savedPattern = []  // Clear previous pattern
+
             var parts = result.split("\n")
             for (var i = 0; i < parts.length; i++) {
                 var path = parts[i]
+                console.log("Processing line:", path)
                 if (path.length > 0) {
                     // Extract values from the string and push to savedPattern
-                    var regex = /startX: (\d+.\d+), startY: (\d+.\d+), endX: (\d+.\d+), endY: (\d+.\d+), direction: (\w+), angle: (-?\d+.\d+)/
+                    var regex = /startX: (-?\d+(\.\d+)?), startY: (-?\d+(\.\d+)?), endX: (-?\d+(\.\d+)?), endY: (-?\d+(\.\d+)?), direction: (left|right|up|down), angle: (-?\d+(\.\d+)?)/;
+
                     var match = regex.exec(path)
                     if (match) {
+                        console.log("Regex match successful:", match)
                         root.savedPattern.push({
                             startX: parseFloat(match[1]),
-                            startY: parseFloat(match[2]),
-                            endX: parseFloat(match[3]),
-                            endY: parseFloat(match[4]),
-                            direction: match[5],
-                            angle: parseFloat(match[6])
+                            startY: parseFloat(match[3]),
+                            endX: parseFloat(match[5]),
+                            endY: parseFloat(match[7]),
+                            direction: match[9],
+                            angle: parseFloat(match[10])
                         })
+                    } else {
+                        console.log("Regex match failed for line:", path)
                     }
                 }
             }
+            // Deep copy savedPattern to inputPattern
+            root.inputPattern = []
+            for (var j = 0; j < root.savedPattern.length; j++) {
+                root.inputPattern.push(Object.assign({}, root.savedPattern[j]))
+            }
         }
-
     }
 
 
@@ -156,11 +176,17 @@ Rectangle {
             // set right alignment
             horizontalAlignment: Text.AlignHCenter
         }
+        Rectangle {
+            width: parent.width
+            height: 1 // Adjust height as needed
+            color: "white"
+        }
 
         // Display pattern data received from C++ in a rectangle as vector. received path is like QString("Path: startX: %1, startY: %2, endX: %3, endY: %4, direction: %5, angle: %6")
         Rectangle {
             width: parent.width
-            height: parent.height / 2 + 5
+            // adjust height as needed a little more than height of the entire screen
+            height: parent.height * 0.5
             color: "black"
             border.color: "white"
             border.width: 2
@@ -210,7 +236,7 @@ Rectangle {
             }
             onClicked: {
                 // send save signal to cpp file
-                processor.savePattern()            
+                processor.savePattern()
 
                 root.patternDefined = true
 
@@ -296,7 +322,7 @@ Rectangle {
 
                 Column {
                     anchors.centerIn: parent
-                    spacing: 20
+                    spacing: 10
 
                     Text {
                         text: "Pattern Defined Successfully!"
@@ -305,6 +331,31 @@ Rectangle {
                         font.bold: true
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
+                    }
+
+                    // show Pattern in new page
+                    Button {
+                        text: "Show Pattern"
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        width: 150
+                        height: 40
+                        background: Rectangle {
+                            radius: 8
+                            color: "#b5f3ee"
+                        }
+                        contentItem: Text {
+                            text: "Show Pattern"
+                            color: "black"
+                            font.pixelSize: 16
+                            font.bold: true
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                        onClicked: {
+                            popup.close()
+                            stack.pop()
+                            stack.push("PatternPage.qml")
+                        }
                     }
 
                     Button {

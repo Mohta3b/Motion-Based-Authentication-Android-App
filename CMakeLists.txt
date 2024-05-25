@@ -4,6 +4,8 @@
 cmake_minimum_required(VERSION 3.16)
 project(sensorsshowcase LANGUAGES CXX)
 
+INCLUDE_DIRECTORIES ( "$ENV{EIGEN3_INCLUDE_DIR}" )
+
 if(NOT DEFINED INSTALL_EXAMPLESDIR)
     set(INSTALL_EXAMPLESDIR "examples")
 endif()
@@ -62,6 +64,8 @@ qt_add_qml_module(sensorsshowcase
         # QML_FILES CustomPath.qml
         QML_FILES LiveLocation.qml
         QML_FILES ProcessorSingleton.qml
+        QML_FILES PatternPage.qml
+        SOURCES kalmanfilter.h kalmanfilter.cpp
 )
 
 target_link_libraries(sensorsshowcase

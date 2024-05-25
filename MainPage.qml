@@ -15,6 +15,7 @@ Rectangle {
 
     Column {
         anchors.fill: parent
+        anchors.centerIn: parent
         spacing: 40
 
 

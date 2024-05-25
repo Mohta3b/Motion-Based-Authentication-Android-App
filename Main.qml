@@ -14,6 +14,7 @@ ApplicationWindow {
     property bool patternDefined: false
     // savedPattern is the pattern saved by the user and it is list of paths
     property var savedPattern: []
+    property var inputPattern: []
 
     width: 420
     height: 760
@@ -22,12 +23,19 @@ ApplicationWindow {
 
 
     StackView {
-            id: stack
-            anchors.fill: parent
-            // anchors.margins: width / 12
+        id: stack
+        anchors.fill: parent
+        // anchors.margins: width / 12
 
-            initialItem: Loader {
-                source: "LoadingPage.qml" // Load the loading page initially
-            }
+        initialItem: Loader {
+            source: "LoadingPage.qml" // Load the loading page initially
         }
+
+        function onPatternPageFinished() {
+            // Pop PatternPage
+            stack.pop()
+            // Pop DefinePatternPage or AuthenticationPage
+            stack.pop()
+        }
+    }
 }

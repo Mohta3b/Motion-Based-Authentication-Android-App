@@ -5,11 +5,11 @@
 #include <QDir>
 
 // define number of samples for removing noise from accelerometer data
-#define ACCELEROMETER_SAMPLE_NUM 20
-#define GYROSCOPE_SAMPLE_NUM 20
-#define ACCEL_DATA_RATE 5
-#define GYRO_DATA_RATE 5
-#define THRESHOLD 0.3
+#define ACCELEROMETER_SAMPLE_NUM 10
+#define GYROSCOPE_SAMPLE_NUM 10
+#define ACCEL_DATA_RATE 10
+#define GYRO_DATA_RATE 10
+#define THRESHOLD 0.5
 #define PATTERN_MATCH_THRESHOLD 0.2
 
 Processor::Processor(QObject *parent) 
@@ -19,8 +19,21 @@ Processor::Processor(QObject *parent)
     // Initialize the processor
     
     totalSampleNumber = 0;
-    currentSensorData = {0, 0, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, ZERO, ZERO};
+    currentSensorData = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, ZERO, ZERO};
     currentPath = {0, 0, 0, 0, "", 0};
+
+    Eigen::MatrixXd A(3, 3);  // State transition matrix
+    Eigen::MatrixXd C(3, 3);  // Observation matrix
+    Eigen::MatrixXd Q(3, 3);  // Process noise covariance matrix
+    Eigen::MatrixXd R(3, 3);  // Measurement noise covariance matrix
+    Eigen::MatrixXd P0(3, 3); // Initial state covariance matrix
+
+    // Initialize Kalman filter
+    auto kalmanFilter = new KalmanFilter(1.0 / static_cast<qreal>(ACCEL_DATA_RATE), A, C, Q, R, P0);
+
+    Eigen::VectorXd x0(3);
+    x0.setZero();
+    kalmanFilter->init(0, x0);
 }
 
 void Processor::defineNewPattern()
@@ -33,7 +46,7 @@ void Processor::defineNewPattern()
     // Reset the current path
     currentPath = {0, 0, 0, 0, "", 0};
     // Reset the current sensor data
-    currentSensorData = {0, 0, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, ZERO, ZERO};
+    currentSensorData = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, ZERO, ZERO};
 }
 
 
@@ -46,43 +59,43 @@ void Processor::updateDirection() {
 
     // Determine direction based on normalized angle
     if (normalizedAngle >= 0 && normalizedAngle < 45 || normalizedAngle >= 315 && normalizedAngle < 360) {
-        if (currentSensorData.x_axis > 0) {
+        if (currentSensorData.x_axis == POSITIVE) {
             currentPath.direction = "right";
-        } else if (currentSensorData.x_axis < 0) {
+        } else if (currentSensorData.x_axis == NEGATIVE) {
             currentPath.direction = "left";
-        } else if (currentSensorData.y_axis > 0) {
+        } else if (currentSensorData.y_axis == POSITIVE) {
             currentPath.direction = "up";
-        } else if (currentSensorData.y_axis < 0) {
+        } else if (currentSensorData.y_axis == NEGATIVE){
             currentPath.direction = "down";
         }
     } else if (normalizedAngle >= 45 && normalizedAngle < 135) {
-        if (currentSensorData.x_axis > 0) {
+        if (currentSensorData.x_axis== POSITIVE) {
             currentPath.direction = "up";
-        } else if (currentSensorData.x_axis < 0) {
+        } else if (currentSensorData.x_axis == NEGATIVE) {
             currentPath.direction = "down";
-        } else if (currentSensorData.y_axis > 0) {
+        } else if (currentSensorData.y_axis== POSITIVE) {
             currentPath.direction = "left";
-        } else if (currentSensorData.y_axis < 0) {
+        } else if (currentSensorData.y_axis == NEGATIVE) {
             currentPath.direction = "right";
         }
     } else if (normalizedAngle >= 135 && normalizedAngle < 225) {
-        if (currentSensorData.x_axis > 0) {
+        if (currentSensorData.x_axis== POSITIVE) {
             currentPath.direction = "left";
-        } else if (currentSensorData.x_axis < 0) {
+        } else if (currentSensorData.x_axis == NEGATIVE) {
             currentPath.direction = "right";
-        } else if (currentSensorData.y_axis > 0) {
+        } else if (currentSensorData.y_axis== POSITIVE) {
             currentPath.direction = "down";
-        } else if (currentSensorData.y_axis < 0) {
+        } else if (currentSensorData.y_axis == NEGATIVE) {
             currentPath.direction = "up";
         }
     } else if (normalizedAngle >= 225 && normalizedAngle < 315) {
-        if (currentSensorData.x_axis > 0) {
+        if (currentSensorData.x_axis== POSITIVE) {
             currentPath.direction = "down";
-        } else if (currentSensorData.x_axis < 0) {
+        } else if (currentSensorData.x_axis == NEGATIVE) {
             currentPath.direction = "up";
-        } else if (currentSensorData.y_axis > 0) {
+        } else if (currentSensorData.y_axis== POSITIVE) {
             currentPath.direction = "right";
-        } else if (currentSensorData.y_axis < 0) {
+        } else if (currentSensorData.y_axis == NEGATIVE) {
             currentPath.direction = "left";
         }
     }
@@ -134,42 +147,50 @@ void Processor::sendCurrentLoacationData()
                                 .arg(currentPath.startY + currentSensorData.distanceMovedY, 0, 'f', 3));
 }
 
+int zeroVelocityXandYNum = 0;
+
 void Processor::updatePosition(qreal x, qreal y)
 {
     if (x == 0 && y == 0) {
-        // enable gyro sensor
-        emit gyroSensorEnabled();
-        if (currentSensorData.lastSampleWasMoving) {
-            processPathData();
-            // TODO: emit new pattern path
-            // send the last path to the GUI using json format
-            emit pathDataProcessed(QString("[Path]\nstartX: %1, startY: %2\nendX: %3, endY: %4\ndirection: %5, angle: %6")
-                                    .arg(currentPath.startX, 0, 'f', 3)
-                                    .arg(currentPath.startY, 0, 'f', 3)
-                                    .arg(currentPath.endX, 0, 'f', 3)
-                                    .arg(currentPath.endY, 0, 'f', 3)
-                                    .arg(currentPath.direction)
-                                    .arg(currentPath.angle));
-            // emit pathDataProcessed(QString("DistanceX: %1, DistanceY: %2, direction: %3, angle: %4")
-            //                         .arg(currentSensorData.distanceMovedX)
-            //                         .arg(currentSensorData.distanceMovedY)
-            //                         .arg(currentPath.direction)
-            //                         .arg(currentPath.angle));
-                                    
+        zeroVelocityXandYNum++;
+        if (zeroVelocityXandYNum > 5){
+            // enable gyro sensor
+            emit gyroSensorEnabled();
+            if (currentSensorData.lastSampleWasMoving) {
+                processPathData();
+                // TODO: emit new pattern path
+                // send the last path to the GUI using json format
+                emit pathDataProcessed(QString("[Path]\nstartX: %1, startY: %2\nendX: %3, endY: %4\ndirection: %5, angle: %6")
+                                           .arg(currentPath.startX, 0, 'f', 3)
+                                           .arg(currentPath.startY, 0, 'f', 3)
+                                           .arg(currentPath.endX, 0, 'f', 3)
+                                           .arg(currentPath.endY, 0, 'f', 3)
+                                           .arg(currentPath.direction)
+                                           .arg(currentPath.angle));
+                // emit pathDataProcessed(QString("DistanceX: %1, DistanceY: %2, direction: %3, angle: %4")
+                //                         .arg(currentSensorData.distanceMovedX)
+                //                         .arg(currentSensorData.distanceMovedY)
+                //                         .arg(currentPath.direction)
+                //                         .arg(currentPath.angle));
 
-            // update currentPath
-            currentPath.direction = "";
-            currentPath.startY = currentPath.endY;
-            currentPath.startX = currentPath.endX;
 
-            // reset currentSensorData
-            currentSensorData = {0, 0, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, ZERO, ZERO};
+                // update currentPath
+                currentPath.direction = "";
+                currentPath.startY = currentPath.endY;
+                currentPath.startX = currentPath.endX;
+
+                // reset currentSensorData
+                currentSensorData = {0, 0, 0, 0, 0, 0, 0, 0, 0, currentPath.angle, 0, false, 0, 0, ZERO, ZERO};
+            }
         }
         return;
     }
-    else {
+    else if (currentSensorData.zeroVelocityNum > 5){
+        zeroVelocityXandYNum = 0;
         // disable gyro sensor
         emit gyroSensorDisabled();
+        currentSensorData.averageGyroscopeZ = 0;
+        currentSensorData.angleZ = 0;
         if (!currentSensorData.lastSampleWasMoving) {
             // update distanceMovedX, distanceMovedY. distance = (1/2 * abs(a) * t^2) + v0 * t. which t is the 1 / data_rate
             if (x > 0)
@@ -186,25 +207,36 @@ void Processor::updatePosition(qreal x, qreal y)
         const qreal deltaTime = 1 / static_cast<qreal>(m_dataRate);
 
         // distance = (1/2 * abs(a) * t^2) + v0 * t
-        currentSensorData.distanceMovedX += qAbs(x) * 0.5 * deltaTime * deltaTime + currentSensorData.last_velocity_x * deltaTime;
-        currentSensorData.distanceMovedY += qAbs(y) * 0.5 * deltaTime * deltaTime + currentSensorData.last_velocity_y * deltaTime;
+        qreal distanceX = qAbs(x) * 0.5 * deltaTime * deltaTime + currentSensorData.last_velocity_x * deltaTime;
+        qreal distanceY = qAbs(y) * 0.5 * deltaTime * deltaTime + currentSensorData.last_velocity_y * deltaTime;
+
+        if (currentSensorData.x_axis == NEGATIVE)
+            currentSensorData.distanceMovedX -= distanceX;
+        else
+            currentSensorData.distanceMovedX += distanceX;
+
+        if (currentSensorData.y_axis == NEGATIVE)
+            currentSensorData.distanceMovedY -= distanceY;
+        else
+            currentSensorData.distanceMovedY += distanceY;
+
+        // currentSensorData.distanceMovedX += qAbs(x) * 0.5 * deltaTime * deltaTime + currentSensorData.last_velocity_x * deltaTime;
+        // currentSensorData.distanceMovedY += qAbs(y) * 0.5 * deltaTime * deltaTime + currentSensorData.last_velocity_y * deltaTime;
 
         // v = a * t + v0
-        currentSensorData.last_velocity_x += qAbs(x) * deltaTime + currentSensorData.last_velocity_x;
-        currentSensorData.last_velocity_y += qAbs(y) * deltaTime + currentSensorData.last_velocity_y;
-
+        currentSensorData.last_velocity_x = qAbs(x) * deltaTime + currentSensorData.last_velocity_x;
+        currentSensorData.last_velocity_y = qAbs(y) * deltaTime + currentSensorData.last_velocity_y;
         sendCurrentLoacationData();
     }
 }
 
 
+
+// Process accelerometer data
 void Processor::processAccelerometerData(qreal x, qreal y, qreal z)
 {
-
-    // calibrate accelerometer
     if (currentSensorData.accelerometerSampleNumber < ACCELEROMETER_SAMPLE_NUM) {
         calibrateAccelerometer(x, y, z);
-        // Emit the message to show the number of samples left to remove noise
         emit accelerometerDataProcessed(QString("[Calibrating accelerometer]\nSamples left for noise removal: %1")
                                         .arg(ACCELEROMETER_SAMPLE_NUM - currentSensorData.accelerometerSampleNumber));
         return;
@@ -214,17 +246,29 @@ void Processor::processAccelerometerData(qreal x, qreal y, qreal z)
     qreal filteredAccelerometerY = filterAccelerometerData(y, currentSensorData.averageAccelerometerY);
     qreal filteredAccelerometerZ = filterAccelerometerData(z, currentSensorData.averageAccelerometerZ);
 
+    // Create measurement vector
+    // Eigen::VectorXd measurement(3);
+    // measurement << filteredAccelerometerX, filteredAccelerometerY, filteredAccelerometerZ;
+
+    // /// Update Kalman filter with measurement
+    // kalmanFilter->update(measurement);
+
+    // // Get filtered values from Kalman filter
+    // Eigen::VectorXd filteredState = kalmanFilter->state();
+
+    // Update position with filtered values (assuming updatePosition accepts x, y, z)
+
+    // updatePosition(filteredState(0), filteredState(1));
     updatePosition(filteredAccelerometerX, filteredAccelerometerY);
-        
-    // Send the processed data to the GUI. only first 3 digits are shown
+
     QString result = QString("Accelerometer: X: %1, Y: %2, Z: %3")
                     .arg(filteredAccelerometerX, 0, 'f', 3)
                     .arg(filteredAccelerometerY, 0, 'f', 3)
                     .arg(filteredAccelerometerZ, 0, 'f', 3);
 
-    // Emit the processed data
     emit accelerometerDataProcessed(result);
 }
+
 
 
 void Processor::calibrateGyroscope(qreal x, qreal y, qreal z)
@@ -236,13 +280,53 @@ void Processor::calibrateGyroscope(qreal x, qreal y, qreal z)
     currentSensorData.gyroscopeSampleNumber++;
 }
 
-void Processor::updateAngle(qreal wz)
+void Processor::updateAngle()
 {
+    qreal newAngleZ = currentSensorData.angleZ + currentPath.angle;
     
+    qreal pathAngle = currentPath.angle;
+    // if currentPath.angle has changed, then currentSensorData.angleZ should be 0
+    
+    // if angleZ is between 0 and 45, angle is 0. if angleZ is between 45 and 135, angle is 90. if angleZ is between 135 and 225, angle is 180. if angleZ is between 225 and 315, angle is 270. if angleZ is between 315 and 360, angle is 0
+    // if angleZ is between 0 and -45, angle is 0. if angleZ is between -45 and -135, angle is -90. if angleZ is between -135 and -225, angle is -180. if angleZ is between -225 and -315, angle is -270. if angleZ is between -315 and -360, angle is 0
+    if (newAngleZ >= 0 && newAngleZ < 45 || newAngleZ >= 315 && newAngleZ < 360) {
+        currentPath.angle = 0;
+    } else if (newAngleZ >= 45 && newAngleZ < 135) {
+        currentPath.angle = 90;
+    } else if (newAngleZ >= 135 && newAngleZ < 225) {
+        currentPath.angle = 180;
+    } else if (newAngleZ >= 225 && newAngleZ < 315) {
+        currentPath.angle = 270;
+    } else if (newAngleZ >= -45 && newAngleZ < 0 || newAngleZ >= -360 && newAngleZ < -315) {
+        currentPath.angle = 0;
+    } else if (newAngleZ >= -135 && newAngleZ < -45) {
+        currentPath.angle = -90;
+    } else if (newAngleZ >= -225 && newAngleZ < -135) {
+        currentPath.angle = -180;
+    } else if (newAngleZ >= -315 && newAngleZ < -225) {
+        currentPath.angle = -270;
+    }
+
+    if (currentPath.angle != pathAngle)
+        currentSensorData.angleZ = 0;
+
+    // qDebug() << "Angle Z:  " << newAngleZ;
 }
+
+qreal radToDeg(qreal radians) {
+    return radians * (180.0 / M_PI);
+}
+
+// Function to calculate rotation angle from angular velocity
+qreal calculateRotationAngle(qreal angularVelocity, qreal timeInterval) {
+    return angularVelocity * timeInterval;
+}
+
 
 void Processor::processGyroscopeData(qreal x, qreal y, qreal z)
 {
+    // define threshold in degrees
+    const qreal GYRO_THRESHOLD = 20;
     // in gyroscope only z axis is used to determine the angle
     // calibrate gyroscope
     if (currentSensorData.gyroscopeSampleNumber < GYROSCOPE_SAMPLE_NUM) {
@@ -253,22 +337,60 @@ void Processor::processGyroscopeData(qreal x, qreal y, qreal z)
         return;
     }
 
-    // Subtract the average to remove bias
-    // qreal filteredGyroscopeX = x - currentSensorData.averageGyroscopeX;
-    // qreal filteredGyroscopeY = y - currentSensorData.averageGyroscopeY;
-    qreal filteredGyroscopeZ = z - currentSensorData.averageGyroscopeZ;
+    // convert angular velocity to angle
+    qreal angularVelocity = z - currentSensorData.averageGyroscopeZ;
 
-    const qreal GYROSCOPE_THRESHOLD = 0.2;
+    angularVelocity = angularVelocity < GYRO_THRESHOLD && angularVelocity > -GYRO_THRESHOLD ? 0 : angularVelocity;
 
-    // Apply threshold to filter out noise
-    filteredGyroscopeZ = filteredGyroscopeZ < GYROSCOPE_THRESHOLD && filteredGyroscopeZ > -GYROSCOPE_THRESHOLD ? 0 : filteredGyroscopeZ;
+    // qDebug() << "rawww ::::: " << angularVelocity;
+    
+    qreal rotationAngle = calculateRotationAngle(angularVelocity, 1.0 / static_cast<qreal>(GYRO_DATA_RATE));
+
+    // rotationAngle = rotationAngle <GYRO_THRESHOLD && rotationAngle > -GYRO_THRESHOLD ? 0 : rotationAngle;
+
+    // kalman filter
+    // Create measurement vector
+    // Eigen::VectorXd measurement(3);
+    // measurement << 0, 0, rotationAngle;
+
+    // /// Update Kalman filter with measurement
+    // kalmanFilter->update(measurement);
+
+    // // Get filtered values from Kalman filter
+    // Eigen::VectorXd filteredState = kalmanFilter->state();
+
+    // // update rotationAngle
+    // rotationAngle = filteredState(2);
+
+    // if rotationAngleDeg was not zero, then disable accelerometer
+    if (angularVelocity == 0){
+        if (currentSensorData.zeroVelocityNum > 5){
+            emit accelSensorEnabled();
+        }
+        currentSensorData.zeroVelocityNum++;
+        // emit accelSensorEnabled();
+    }
+    else {
+        emit accelSensorDisabled();
+        currentSensorData.zeroVelocityNum = 0;
+        currentSensorData.lastSampleWasMoving = false;
+        currentSensorData.distanceMovedX = 0;
+        currentSensorData.distanceMovedY = 0;
+        // qDebug() << "Gyroscope Z:  " << rotationAngle << "raw Z:  " << angularVelocity;
+    }
+        
+    // update angleZ
+    // currentSensorData.angleZ += rotationAngle;
+    currentSensorData.angleZ += rotationAngle;
 
     // calculate angle. angle can be 0,90,180,270, -90, -180, -270
-    updateAngle(filteredGyroscopeZ);
+    updateAngle();
 
     // Send the processed data to the GUI. only first 3 digits are shown
     QString result = QString("Gyroscope: Z: %1")
-                    .arg(filteredGyroscopeZ, 0, 'f', 3);
+                    .arg(rotationAngle, 0, 'f', 3);
+
+
 
     // Emit the processed data
     emit gyroscopeDataProcessed(result);
@@ -327,10 +449,10 @@ void Processor::savePattern()
     // // Close the file
     // file.close();
 
-    qDebug() << "Pattern saved";
+    qDebug() << "Pattern saved!";
 
     // emit the pattern in json format
-    QString result = "";
+    QString result = "[Path]\n";
     for (int i = 0; i < newPathVector.size(); i++) {
         result += QString("startX: %1, startY: %2, endX: %3, endY: %4, direction: %5, angle: %6\n")
                   .arg(newPathVector[i].startX, 0, 'f', 3)
@@ -350,7 +472,7 @@ void Processor::startCapturing()
     // Reset the total sample number
     totalSampleNumber = 0;
     // Reset the current sensor data
-    currentSensorData = {0, 0, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, ZERO, ZERO};
+    currentSensorData = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, ZERO, ZERO};
     // Reset the current path
     currentPath = {0, 0, 0, 0, "", 0};
     // Reset the new path vector
@@ -359,6 +481,23 @@ void Processor::startCapturing()
 
 void Processor::checkPatternMatch(const QVariant &pattern)
 {
+    // Convert new path vector to JSON format and emit the pattern
+    QString inputPattern = "[Path]\n";
+    for (const auto& path : newPathVector) {
+        inputPattern += QString("startX: %1, startY: %2, endX: %3, endY: %4, direction: %5, angle: %6\n")
+                        .arg(path.startX, 0, 'f', 3)
+                        .arg(path.startY, 0, 'f', 3)
+                        .arg(path.endX, 0, 'f', 3)
+                        .arg(path.endY, 0, 'f', 3)
+                        .arg(path.direction)
+                        .arg(path.angle);
+    }
+    emit patternSaved(inputPattern);
+
+    // print the pattern QVariant
+    qDebug() << "Pattern QVariant: " << pattern;
+
+
     // Check if the newPathVector matches the pattern with a threshold of 0.2
     bool match = true;
 
@@ -372,28 +511,53 @@ void Processor::checkPatternMatch(const QVariant &pattern)
     }
 
     // Check if the two vectors match
-    for (int i = 0; i < newPathVector.size(); i++) {
+    for (int i = 0; i < newPathVector.size(); ++i) {
+        QVariantMap newPathMap;
+        newPathMap["startX"] = newPathVector[i].startX;
+        newPathMap["startY"] = newPathVector[i].startY;
+        newPathMap["endX"] = newPathVector[i].endX;
+        newPathMap["endY"] = newPathVector[i].endY;
+        newPathMap["direction"] = newPathVector[i].direction;
+        newPathMap["angle"] = newPathVector[i].angle;
+
         QVariantMap patternMap = patternList[i].toMap();
-        
-        // Compare each path element with the pattern
-        if (qAbs(newPathVector[i].startX - patternMap["startX"].toDouble()) > PATTERN_MATCH_THRESHOLD ||
-            qAbs(newPathVector[i].startY - patternMap["startY"].toDouble()) > PATTERN_MATCH_THRESHOLD ||
-            qAbs(newPathVector[i].endX - patternMap["endX"].toDouble()) > PATTERN_MATCH_THRESHOLD ||
-            qAbs(newPathVector[i].endY - patternMap["endY"].toDouble()) > PATTERN_MATCH_THRESHOLD ||
-            newPathVector[i].direction != patternMap["direction"].toString() ||
-            qAbs(newPathVector[i].angle - patternMap["angle"].toDouble()) > 45) {
+        if (qAbs(newPathMap["startX"].toDouble() - patternMap["startX"].toDouble()) > PATTERN_MATCH_THRESHOLD ||
+            qAbs(newPathMap["startY"].toDouble() - patternMap["startY"].toDouble()) > PATTERN_MATCH_THRESHOLD ||
+            qAbs(newPathMap["endX"].toDouble() - patternMap["endX"].toDouble()) > PATTERN_MATCH_THRESHOLD ||
+            qAbs(newPathMap["endY"].toDouble() - patternMap["endY"].toDouble()) > PATTERN_MATCH_THRESHOLD ||
+            newPathMap["direction"].toString() != patternMap["direction"].toString() ||
+            qAbs(newPathMap["angle"].toDouble() - patternMap["angle"].toDouble()) > 45) {
             match = false;
             break;
         }
     }
 
-    // Emit the result
-    if (match) {
-        emit patternMatched("Pattern matched");
-    } else {
-        emit patternMatched("Pattern not matched");
+    // Print both patterns for debugging
+    qDebug() << "New Path Vector:";
+    for (const auto& path : newPathVector) {
+        qDebug() << "startX:" << path.startX
+                 << "startY:" << path.startY
+                 << "endX:" << path.endX
+                 << "endY:" << path.endY
+                 << "direction:" << path.direction
+                 << "angle:" << path.angle;
     }
+
+    qDebug() << "Pattern Vector:";
+    for (const auto& patternItem : patternList) {
+        QVariantMap patternMap = patternItem.toMap();
+        qDebug() << "startX:" << patternMap["startX"].toDouble()
+                 << "startY:" << patternMap["startY"].toDouble()
+                 << "endX:" << patternMap["endX"].toDouble()
+                 << "endY:" << patternMap["endY"].toDouble()
+                 << "direction:" << patternMap["direction"].toString()
+                 << "angle:" << patternMap["angle"].toDouble();
+    }
+
+    // Emit the result
+    emit patternMatched(match ? "Pattern matched" : "Pattern not matched");
 }
+
 
 
 // void Processor::checkPatternMatch() {

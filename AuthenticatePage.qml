@@ -5,8 +5,8 @@ import QtSensors
 
 
 Rectangle {
-    width: parent.width
-    height: parent.height
+    width: root.width
+    height: root.height
     color: "#263238" // Darker color for the background
 
     property int data_rate: processor.dataRate
@@ -15,20 +15,21 @@ Rectangle {
     ProcessorSingleton {
         id: processor // Reference to the Processor component
 
-        // onAccelerometerDataProcessed: {
-        //     // Update the text and progress bar based on the processed data
-        //     processedAccelerometerDataText.text = result
-        //     var matches = result.match(/Samples left for noise removal: (\d+)/)
-        //     if (matches && matches.length > 1) {
-        //         var samplesLeft = parseInt(matches[1])
-        //         progressBar.value = 20 - samplesLeft
-        //         progressBar.visible = true
-        //         calibrationText.visible = true
-        //     } else {
-        //         progressBar.visible = false
-        //         calibrationText.visible = false
-        //     }
-        // }
+        onGyroSensorEnabled: {
+            gyroscope.start()
+        }
+
+        onGyroSensorDisabled: {
+            gyroscope.stop()
+        }
+
+        onAccelSensorEnabled: {
+            accelerometer.start()
+        }
+
+        onAccelSensorDisabled: {
+            accelerometer.stop()
+        }
 
         onAccelerometerDataProcessed: {
             // Update the text and progress bar based on the processed data
@@ -45,6 +46,13 @@ Rectangle {
             }
         }
 
+        onGyroscopeDataProcessed: {
+            // Handle processed data from C++
+            // console.log("Processed Gyroscope Data:", result)
+            // Display the processed result in QML
+            processedGyroscopeDataText.text = result
+        }
+
         onLocationDataProcessed: {
                 // Handle processed data from C++
                 // console.log("Processed Location Data:", result)
@@ -58,9 +66,40 @@ Rectangle {
 
         onPathDataProcessed: {
             // Handle processed data from C++
-            console.log("Processed Path Data:", result)
+            // console.log("Processed Path Data:", result)
             // Display the processed result in QML
             patternText.text = result
+        }
+
+        onPatternSaved: {
+            console.log("Pattern Saved:", result)
+            // Save the pattern in QML
+            root.inputPattern = []
+
+            var parts = result.split("\n")
+            for (var i = 0; i < parts.length; i++) {
+                var path = parts[i]
+                console.log("Processing line:", path)
+                if (path.length > 0) {
+                    // Extract values from the string and push to savedPattern
+                    var regex = /startX: (-?\d+(\.\d+)?), startY: (-?\d+(\.\d+)?), endX: (-?\d+(\.\d+)?), endY: (-?\d+(\.\d+)?), direction: (left|right|up|down), angle: (-?\d+(\.\d+)?)/;
+
+                    var match = regex.exec(path)
+                    if (match) {
+                        console.log("Regex match successful:", match)
+                        root.inputPattern.push({
+                            startX: parseFloat(match[1]),
+                            startY: parseFloat(match[3]),
+                            endX: parseFloat(match[5]),
+                            endY: parseFloat(match[7]),
+                            direction: match[9],
+                            angle: parseFloat(match[10])
+                        })
+                    } else {
+                        console.log("Regex match failed for line:", path)
+                    }
+                }
+            }
         }
 
         onPatternMatched: {
@@ -138,7 +177,7 @@ Rectangle {
         // LiveLocation to show user's movement
         Rectangle {
             width: parent.width - 5
-            height: parent.height / 2
+            height: parent.height * 0.5
             color: "#37474F" // Darker color for the background
             border.color: "white"
             border.width: 2
@@ -157,24 +196,6 @@ Rectangle {
             horizontalAlignment: Text.AlignHCenter
             visible: false
         }
-
-        // Text {
-        //     id: calibrationText
-        //     text: "Calibrating..."
-        //     font.pixelSize: 18
-        //     color: "yellow"
-        //     horizontalAlignment: Text.AlignHCenter
-        //     visible: false
-        // }
-
-        // ProgressBar {
-        //     id: progressBar
-        //     width: parent.width - 40
-        //     value: 0
-        //     from: 0
-        //     to: 20
-        //     visible: false
-        // }
         
         // Pattern text to show the pattern
         Text {
@@ -183,6 +204,14 @@ Rectangle {
             font.pixelSize: 18
             color: "red"
             horizontalAlignment: Text.AlignHCenter // Center horizontally
+        }
+
+        Text {
+            id: processedGyroscopeDataText
+            text: ""
+            font.pixelSize: 16
+            color: "white"
+            visible: false
         }
         // Button to start/finish capturing data
         Button {
@@ -298,7 +327,7 @@ Rectangle {
 
             Column {
                 anchors.centerIn: parent
-                spacing: 20
+                spacing: 10
 
                 Text {
                     text: "Access Granted!"
@@ -307,6 +336,31 @@ Rectangle {
                     font.bold: true
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
+                }
+
+                Button {
+                    text: "Show Pattern"
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: 150
+                    height: 40
+                    background: Rectangle {
+                        radius: 8
+                        color: "white"
+                    }
+                    contentItem: Text {
+                        text: "Show Pattern"
+                        color: "#2E7D32"
+                        font.pixelSize: 16
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    onClicked: {
+                        accessGrantedPopup.close()
+                        // var patternPage = stack.push("PatternPage.qml").item
+                        // patternPage.pageFinished.connect(stack.onPatternPageFinished)
+                        stack.pop()
+                        stack.push("PatternPage.qml")
+                    }
                 }
 
                 Button {
@@ -353,7 +407,7 @@ Rectangle {
 
             Column {
                 anchors.centerIn: parent
-                spacing: 20
+                spacing: 10
 
                 Text {
                     text: "Access Denied!"
@@ -362,6 +416,29 @@ Rectangle {
                     font.bold: true
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
+                }
+
+                Button {
+                    text: "Show Entered Pattern"
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: 150
+                    height: 40
+                    background: Rectangle {
+                        radius: 8
+                        color: "white"
+                    }
+                    contentItem: Text {
+                        text: "Show Pattern"
+                        color: "#B71C1C"
+                        font.pixelSize: 16
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    onClicked: {
+                        accessDeniedPopup.close()
+                        stack.pop()
+                        stack.push("PatternPage.qml")
+                    }
                 }
 
                 Button {
