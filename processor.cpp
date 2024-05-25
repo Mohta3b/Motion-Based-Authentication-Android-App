@@ -7,8 +7,8 @@
 // define number of samples for removing noise from accelerometer data
 #define ACCELEROMETER_SAMPLE_NUM 10
 #define GYROSCOPE_SAMPLE_NUM 10
-#define ACCEL_DATA_RATE 10
-#define GYRO_DATA_RATE 10
+#define ACCEL_DATA_RATE 20
+#define GYRO_DATA_RATE 20
 #define THRESHOLD 0.5
 #define PATTERN_MATCH_THRESHOLD 0.2
 
@@ -153,7 +153,7 @@ void Processor::updatePosition(qreal x, qreal y)
 {
     if (x == 0 && y == 0) {
         zeroVelocityXandYNum++;
-        if (zeroVelocityXandYNum > 5){
+        if (zeroVelocityXandYNum > 10){
             // enable gyro sensor
             emit gyroSensorEnabled();
             if (currentSensorData.lastSampleWasMoving) {
@@ -167,12 +167,6 @@ void Processor::updatePosition(qreal x, qreal y)
                                            .arg(currentPath.endY, 0, 'f', 3)
                                            .arg(currentPath.direction)
                                            .arg(currentPath.angle));
-                // emit pathDataProcessed(QString("DistanceX: %1, DistanceY: %2, direction: %3, angle: %4")
-                //                         .arg(currentSensorData.distanceMovedX)
-                //                         .arg(currentSensorData.distanceMovedY)
-                //                         .arg(currentPath.direction)
-                //                         .arg(currentPath.angle));
-
 
                 // update currentPath
                 currentPath.direction = "";
@@ -185,7 +179,7 @@ void Processor::updatePosition(qreal x, qreal y)
         }
         return;
     }
-    else if (currentSensorData.zeroVelocityNum > 5){
+    else if (currentSensorData.zeroVelocityNum > 10){
         zeroVelocityXandYNum = 0;
         // disable gyro sensor
         emit gyroSensorDisabled();
@@ -219,9 +213,6 @@ void Processor::updatePosition(qreal x, qreal y)
             currentSensorData.distanceMovedY -= distanceY;
         else
             currentSensorData.distanceMovedY += distanceY;
-
-        // currentSensorData.distanceMovedX += qAbs(x) * 0.5 * deltaTime * deltaTime + currentSensorData.last_velocity_x * deltaTime;
-        // currentSensorData.distanceMovedY += qAbs(y) * 0.5 * deltaTime * deltaTime + currentSensorData.last_velocity_y * deltaTime;
 
         // v = a * t + v0
         currentSensorData.last_velocity_x = qAbs(x) * deltaTime + currentSensorData.last_velocity_x;
@@ -309,8 +300,6 @@ void Processor::updateAngle()
 
     if (currentPath.angle != pathAngle)
         currentSensorData.angleZ = 0;
-
-    // qDebug() << "Angle Z:  " << newAngleZ;
 }
 
 qreal radToDeg(qreal radians) {
@@ -342,7 +331,6 @@ void Processor::processGyroscopeData(qreal x, qreal y, qreal z)
 
     angularVelocity = angularVelocity < GYRO_THRESHOLD && angularVelocity > -GYRO_THRESHOLD ? 0 : angularVelocity;
 
-    // qDebug() << "rawww ::::: " << angularVelocity;
     
     qreal rotationAngle = calculateRotationAngle(angularVelocity, 1.0 / static_cast<qreal>(GYRO_DATA_RATE));
 
@@ -364,7 +352,7 @@ void Processor::processGyroscopeData(qreal x, qreal y, qreal z)
 
     // if rotationAngleDeg was not zero, then disable accelerometer
     if (angularVelocity == 0){
-        if (currentSensorData.zeroVelocityNum > 5){
+        if (currentSensorData.zeroVelocityNum > 10){
             emit accelSensorEnabled();
         }
         currentSensorData.zeroVelocityNum++;
@@ -399,55 +387,10 @@ void Processor::processGyroscopeData(qreal x, qreal y, qreal z)
 
 void Processor::savePattern()
 {
-    // Save the pattern to a json file
-    // The file name is the current date and time
-    // save it in the saved-pattern directory under the current directory
-
     // copy newPathVector to patternVector
     for (const Path& path : newPathVector) {
         patternVector.append(path); // Push a copy of each Path object
     }
-
-    // delete all files under the current directory
-    // QDir dir("saved-pattern");
-    // dir.setNameFilters(QStringList() << "*.json");
-    // dir.setFilter(QDir::Files);
-    // foreach (QString dirFile, dir.entryList()) {
-    //     dir.remove(dirFile);
-    // }
-
-    // // Create a new file
-    // QString fileName = QDateTime::currentDateTime().toString("yyyy-MM-dd-hh-mm-ss") + ".json";
-    // QString filePath = "saved-pattern/" + fileName;
-    // QFile file(filePath);
-    // if (!file.open(QIODevice::WriteOnly)) {
-    //     qDebug() << "Error: Cannot open file for writing";
-    //     return;
-    // }
-
-    // // Write the pattern to the file
-    // QTextStream out(&file);
-    // out << "{\n";
-    // out << "  \"pattern\": [\n";
-    // for (int i = 0; i < newPathVector.size(); i++) {
-    //     out << "    {\n";
-    //     out << "      \"startX\": " << newPathVector[i].startX << ",\n";
-    //     out << "      \"startY\": " << newPathVector[i].startY << ",\n";
-    //     out << "      \"endX\": " << newPathVector[i].endX << ",\n";
-    //     out << "      \"endY\": " << newPathVector[i].endY << ",\n";
-    //     out << "      \"direction\": \"" << newPathVector[i].direction << "\",\n";
-    //     out << "      \"angle\": " << newPathVector[i].angle << "\n";
-    //     out << "    }";
-    //     if (i != newPathVector.size() - 1) {
-    //         out << ",";
-    //     }
-    //     out << "\n";
-    // }
-    // out << "  ]\n";
-    // out << "}\n";
-
-    // // Close the file
-    // file.close();
 
     qDebug() << "Pattern saved!";
 
@@ -468,7 +411,6 @@ void Processor::savePattern()
 
 void Processor::startCapturing()
 {
-    // Start capturing the data
     // Reset the total sample number
     totalSampleNumber = 0;
     // Reset the current sensor data
@@ -493,10 +435,6 @@ void Processor::checkPatternMatch(const QVariant &pattern)
                         .arg(path.angle);
     }
     emit patternSaved(inputPattern);
-
-    // print the pattern QVariant
-    qDebug() << "Pattern QVariant: " << pattern;
-
 
     // Check if the newPathVector matches the pattern with a threshold of 0.2
     bool match = true;
@@ -530,28 +468,6 @@ void Processor::checkPatternMatch(const QVariant &pattern)
             match = false;
             break;
         }
-    }
-
-    // Print both patterns for debugging
-    qDebug() << "New Path Vector:";
-    for (const auto& path : newPathVector) {
-        qDebug() << "startX:" << path.startX
-                 << "startY:" << path.startY
-                 << "endX:" << path.endX
-                 << "endY:" << path.endY
-                 << "direction:" << path.direction
-                 << "angle:" << path.angle;
-    }
-
-    qDebug() << "Pattern Vector:";
-    for (const auto& patternItem : patternList) {
-        QVariantMap patternMap = patternItem.toMap();
-        qDebug() << "startX:" << patternMap["startX"].toDouble()
-                 << "startY:" << patternMap["startY"].toDouble()
-                 << "endX:" << patternMap["endX"].toDouble()
-                 << "endY:" << patternMap["endY"].toDouble()
-                 << "direction:" << patternMap["direction"].toString()
-                 << "angle:" << patternMap["angle"].toDouble();
     }
 
     // Emit the result

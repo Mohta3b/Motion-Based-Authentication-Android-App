@@ -5,7 +5,6 @@
 #include <QQmlEngine>
 #include "kalmanfilter.h"
 
-// start: {x:double, y:double}, end: {x:double, y:double}, direction: string, angle: double
 struct Path {
     qreal startX;
     qreal startY;
@@ -25,7 +24,6 @@ struct sensorData {
     qreal zeroVelocityNum;
     bool lastSampleWasMoving;
     qreal last_velocity_x, last_velocity_y;
-    // define x_axis can be positive or negative or zero
     Direction x_axis;
     Direction y_axis;
 };
@@ -54,7 +52,6 @@ public:
 
 signals:
     void accelerometerDataProcessed(const QString &result);
-    // void accelerometerDataCalibrated(const QString &result);
     void gyroscopeDataProcessed(const QString &result);
     void pathDataProcessed(const QString &result);
     void locationDataProcessed(const QString &result);
@@ -72,20 +69,17 @@ public slots:
     void defineNewPattern();
     void savePattern();
     void startCapturing();
-    // check PatternMatch receives property var savedPattern: [] as input pattern
     void checkPatternMatch(const QVariant &pattern);
 
 private:
     int m_dataRate;
 
-    // double positionX, positionY, positionZ;
-
-    // double lastTime;
     long long totalSampleNumber;
 
     sensorData currentSensorData;
 
     Path currentPath;
+
     // vector to store path
     QVector<Path> newPathVector;
 
