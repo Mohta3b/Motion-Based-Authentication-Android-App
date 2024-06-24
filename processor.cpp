@@ -7,8 +7,8 @@
 // define number of samples for removing noise from accelerometer data
 #define ACCELEROMETER_SAMPLE_NUM 10
 #define GYROSCOPE_SAMPLE_NUM 10
-#define ACCEL_DATA_RATE 20
-#define GYRO_DATA_RATE 20
+#define ACCEL_DATA_RATE 10
+#define GYRO_DATA_RATE 10
 #define THRESHOLD 0.5
 #define PATTERN_MATCH_THRESHOLD 0.2
 
